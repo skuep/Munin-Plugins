@@ -1,0 +1,160 @@
+#!/usr/bin/env python
+# plugin for monitoring a wifi adapter in ap mode
+# uses iw <interface> station dump
+#
+# To use, just link to this file like this:
+# ln -s /path/to/ap_ /etc/munin/plugins/ap_clients_wlan0
+# ln -s /path/to/ap_ /etc/munin/plugins/ap_rssi_wlan0
+# ln -s /path/to/ap_ /etc/munin/plugins/ap_rate_wlan0
+#
+# Author: Simon Kueppers <simon.kueppers@skueppers.de>
+# v1.0 11.01.2015 - First draft
+#
+# No special license on this plugin. Just pass me a beer
+# in case we meet
+
+import os
+import sys
+import string
+import subprocess
+import re
+
+# Some global definitions
+plugin_name = list(os.path.split(sys.argv[0]))[1]
+type = plugin_name.split('_')[1]
+interface = plugin_name.split('_')[2]
+plugin_version = "AP v1.0"
+
+plugin_defs = {
+    'clients': {
+        'graph_title': 'Access Point clients',
+        'graph_info': 'This graph shows the client count on the access point',
+        'graph_vlabel': 'clients',
+        'graph_category': 'wifi',
+    }, 'rssi': {
+        'graph_title': 'Access Point client RSSI',
+        'graph_info': 'This graph shows signal strength stats of the clients',
+        'graph_vlabel': 'dBm',
+        'graph_category': 'wifi',
+    }, 'rate': {
+        'graph_title': 'Access Point client bitrate',
+        'graph_info': 'This graph shows bitrate stats of the clients',
+        'graph_vlabel': 'MBit/s',
+        'graph_category': 'wifi',
+    }
+}
+
+graph_defs = {
+    'clients': {
+        'type': 'GAUGE',
+        #'warning': '-15:15',
+        #'critical': '-20:20'
+    }, 'rssi': {
+        'type': 'GAUGE',
+        #'warning': '25:',
+        #'critical': '20:'
+    }, 'rate': {
+        'type': 'GAUGE'
+    }
+}
+
+def getStationData():
+    data = subprocess.check_output("iw dev {} station dump".format(interface), shell=True)
+    
+
+    stationRegExp = "Station "
+    rateRegExp = re.compile("tx bitrate:\s+(?P<rate>[0-9]+(\.[0-9]+)?)")
+    rssiRegExp = re.compile("signal:\s+(?P<rssi>\-?[0-9]+(\.[0-9]+)?)")
+    stations = re.split(stationRegExp, data)
+
+    stationData = []
+
+    for station in stations:
+        if (station != ""):
+            data = {
+                'rate': float(rateRegExp.search(station).group('rate')),
+                'rssi': float(rssiRegExp.search(station).group('rssi'))
+            }
+
+            stationData.append(data)
+
+    return stationData
+
+def getValues():
+    stationData = getStationData() 
+    
+    if (len(stationData) > 0):
+        values = {
+            'clients': {
+                'Clients': len(stationData)
+            }, 'rate': {
+                'Worst': min([x['rate'] for x in stationData]),
+                'Average': sum([x['rate'] for x in stationData]) / len(stationData),
+                'Best': max([x['rate'] for x in stationData])
+            }, 'rssi': {
+                'Worst': min([x['rssi'] for x in stationData]),
+                'Average': sum([x['rssi'] for x in stationData]) / len(stationData),
+                'Best': max([x['rssi'] for x in stationData])
+           }
+        }
+    else:
+        values = {
+            'clients': {
+                'Clients': 0
+            }, 'rate': {
+                'Worst': 'U',
+                'Average': 'U',
+                'Best': 'U'
+            }, 'rssi': {
+                'Worst': 'U',
+                'Average': 'U',
+                'Best': 'U'
+            }
+       } 
+
+    return values
+
+
+
+
+
+# The real business happens here
+# Check what munin wants from us and answer accordingly
+if len(sys.argv) > 1:
+    if sys.argv[1] == "autoconf" :
+        print('yes')
+        sys.exit(0)
+    elif sys.argv[1] == "config" :
+        for key in plugin_defs[type]:
+            print('{} {}'.format(key, plugin_defs[type][key]))
+
+        values = getValues()
+
+        for key in values[type]:
+            print('{0}.label {0}'.format(key))
+        
+            for defn in graph_defs[type]:
+                print('{}.{} {}'.format(key, defn, graph_defs[type][defn]))
+
+        sys.exit(0)
+    elif sys.argv[1] == "suggest" :
+        for key in plugin_defs:
+            print('{}_<if>'.format(key))
+        sys.exit(0)
+    elif sys.argv[1] == "version" :
+        print(plugin_version)
+        sys.exit(0)
+    else:
+        #Unknown argument
+        sys.exit(1)
+
+else:
+    # No argument given, retrieve and output the values
+    values = getValues()
+    
+    for key in values[type]:
+        print('{}.value {}'.format(key, values[type][key]))
+
+    sys.exit(0)
+
+
