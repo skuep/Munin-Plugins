@@ -13,6 +13,6 @@ The plugin uses BeautifoulSoup and Python 2. See the script file for more detail
 
 Access Point Statistics
 -----------------------
-This plugin uses iw <if> station dump to generate statistics of clients connected to the wireless adapter in AP mode.
+This plugin uses iw <if> station dump to generate statistics of clients connected to the wireless adapter in AP (e.g. with hostapd) mode.
 
 See the script file for more details.
