@@ -36,25 +36,48 @@ plugin_defs = {
         'graph_info': 'This graph shows signal strength stats of the clients',
         'graph_vlabel': 'dBm',
         'graph_category': 'wifi',
+        'graph_order': 'worst average best'
     }, 'rate': {
         'graph_title': 'Access Point client bitrate',
         'graph_info': 'This graph shows bitrate stats of the clients',
         'graph_vlabel': 'MBit/s',
         'graph_category': 'wifi',
+        'graph_order': 'worst average best'
     }
 }
 
 graph_defs = {
     'clients': {
-        'type': 'GAUGE',
-        #'warning': '-15:15',
-        #'critical': '-20:20'
+        'count': {
+            'label': 'Clients',
+            'type': 'GAUGE',
+            #'warning': '-15:15',
+            #'critical': '-20:20'
+        }
     }, 'rssi': {
-        'type': 'GAUGE',
-        #'warning': '25:',
-        #'critical': '20:'
+        'best': {
+            'label': 'Best',
+            'type': 'GAUGE',
+        }, 'average': {
+            'label': 'Average',
+            'type': 'GAUGE',
+        }, 'worst': {
+            'label': 'Worst',
+            'type': 'GAUGE',
+        }
     }, 'rate': {
-        'type': 'GAUGE'
+        'best': {
+            'label': 'Best',
+            'type': 'GAUGE',
+            #'warning': '-15:15',
+            #'critical': '-20:20'
+        }, 'average': {
+            'label': 'Average',
+            'type': 'GAUGE',
+        }, 'worst': {
+            'label': 'Worst',
+            'type': 'GAUGE',
+        }
     }
 }
 
@@ -86,29 +109,29 @@ def getValues():
     if (len(stationData) > 0):
         values = {
             'clients': {
-                'Clients': len(stationData)
+                'count': len(stationData)
             }, 'rate': {
-                'Worst': min([x['rate'] for x in stationData]),
-                'Average': sum([x['rate'] for x in stationData]) / len(stationData),
-                'Best': max([x['rate'] for x in stationData])
+                'worst': min([x['rate'] for x in stationData]),
+                'average': sum([x['rate'] for x in stationData]) / len(stationData),
+                'best': max([x['rate'] for x in stationData]),
             }, 'rssi': {
-                'Worst': min([x['rssi'] for x in stationData]),
-                'Average': sum([x['rssi'] for x in stationData]) / len(stationData),
-                'Best': max([x['rssi'] for x in stationData])
+                'worst': min([x['rssi'] for x in stationData]),
+                'average': sum([x['rssi'] for x in stationData]) / len(stationData),
+                'best': max([x['rssi'] for x in stationData]),
            }
         }
     else:
         values = {
             'clients': {
-                'Clients': 0
+                'count': 0
             }, 'rate': {
-                'Worst': 'U',
-                'Average': 'U',
-                'Best': 'U'
+                'worst': 'U',
+                'average': 'U',
+                'best': 'U'
             }, 'rssi': {
-                'Worst': 'U',
-                'Average': 'U',
-                'Best': 'U'
+                'worst': 'U',
+                'average': 'U',
+                'best': 'U'
             }
        } 
 
@@ -128,13 +151,14 @@ if len(sys.argv) > 1:
         for key in plugin_defs[type]:
             print('{} {}'.format(key, plugin_defs[type][key]))
 
-        values = getValues()
+#        values = getValues()
 
-        for key in values[type]:
-            print('{0}.label {0}'.format(key))
+ #       for key in values[type]:
+  #          print('{0}.label {0}'.format(key))
         
-            for defn in graph_defs[type]:
-                print('{}.{} {}'.format(key, defn, graph_defs[type][defn]))
+        for graph in graph_defs[type]:
+            for defn in graph_defs[type][graph]:
+                print('{}.{} {}'.format(graph, defn, graph_defs[type][graph][defn]))
 
         sys.exit(0)
     elif sys.argv[1] == "suggest" :

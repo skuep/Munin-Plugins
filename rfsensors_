@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+# plugin for querying all sorts of rf link sensors
+# (like temperature, energy sensors and so forth)
+# This plugin uses a special hardware in order to
+# communicate over the rf link
+#
+# To use, just link to this file like this:
+# ln -s /path/to/rfsensors_ /etc/munin/plugins/rfsensors_energy
+# ln -s /path/to/rfsensors_ /etc/munin/plugins/rfsensors_power
+# ln -s /path/to/rfsensors_ /etc/munin/plugins/rfsensors_voltage
+# ln -s /path/to/rfsensors_ /etc/munin/plugins/rfsensors_current
+#
+# This plugin needs some configuration in /etc/munin/plugin-conf.d/global
+# [rfsensors_*]
+#   env.port /dev/ttyXYZ
+#   env.devicemap <ID>:<type>:<Name>[;<ID>:<type>:<Name>]* 
+#
+# Where env.port specifies the port of the wireless adapter
+# and env.idmap lists all sensor IDs with their type (e.g. emeter) 
+# and name to be used on the graphs
+#
+# Make sure the munin user is allowed to access /dev/ttyXYZ
+# 
+# Author: Simon Kueppers <simon.kueppers@skueppers.de>
+# v1.0 25.01.2015 - First draft
+#
+# No special license on this plugin. Just pass me a beer
+# in case we meet
+
+import os
+import sys
+import serial
+
+pluginName = list(os.path.split(sys.argv[0]))[1]
+sensorType = pluginName.split('_')[1]
+pluginVersion = "RF Sensors v1.0"
+
+pluginDefs = {
+    'energy': {
+        'graph_title': 'Electrical Energy',
+        'graph_info': 'This graph shows the energy reported by the wireless meters',
+        'graph_vlabel': 'Watthours',
+        'graph_category': 'rfsensors',
+    }, 'power': {
+        'graph_title': 'Electrical Power',
+        'graph_info': 'This graph shows the power consumption reported by the wireless meters',
+        'graph_vlabel': 'Watts',
+        'graph_category': 'rfsensors',
+    }, 'voltage': {
+        'graph_title': 'Electrical Voltage',
+        'graph_info': 'This graph shows the electrical voltage reported by the wireless meters',
+        'graph_vlabel': 'Volts',
+        'graph_category': 'rfsensors',
+    }, 'current': {
+        'graph_title': 'Electrical Current',
+        'graph_info': 'This graph shows the electrical current reported by the wireless meters',
+        'graph_vlabel': 'Milliamperes',
+        'graph_category': 'rfsensors',
+    }    
+}
+
+graphDefs = {
+    'energy': {
+        'type': 'GAUGE'
+    }, 'power': {
+        'type': 'GAUGE'
+    }, 'voltage': {
+        'type': 'GAUGE'
+    }, 'current': {
+        'type': 'GAUGE'
+    }
+}
+
+def decodeEnergyMeter(dataLine):
+    data = dataLine.split(";")
+    dataSet = {'id': data[0], 'power': data[1], 'current': data[2], 'voltage': data[3], 'energy': data[4]}
+
+    return dataSet[sensorType]
+
+def generateDeviceMap():
+    # Read in env.devicemap and generate python map
+    deviceMapString = os.environ['devicemap']
+    deviceMap = []
+
+    for deviceString in deviceMapString.split(";"):
+        if (deviceString != ''):
+            values = deviceString.split(":")
+            dict = {'id': values[0], 'type': values[1], 'name': values[2]}
+            deviceMap.append(dict)
+
+    return deviceMap
+
+def retrieveData():
+    # Retrieve data from adapter
+    portString = os.environ['port']
+    deviceData = {}
+    deviceMap = generateDeviceMap()
+
+    serialPort = serial.Serial(portString, 9600, timeout=1)
+
+    for device in deviceMap:
+        cmdLine = "{} {}\r".format("DATA", device['id'])
+        serialPort.write(cmdLine.encode('ascii'))
+        statusLine = serialPort.readline().decode('ascii').rstrip()
+        statusCode = statusLine.split(":")[0]
+
+        if (statusCode == '101'):
+            dataLine = serialPort.readline().decode('ascii').rstrip()
+            value = decodeEnergyMeter(dataLine)
+            deviceData[device['id']] = value
+
+    serialPort.close()
+    return deviceData
+             
+# The real business happens here
+# Check what munin wants from us and answer accordingly
+if len(sys.argv) > 1:
+    if sys.argv[1] == "autoconf" :
+        print('yes')
+        sys.exit(0)
+    elif sys.argv[1] == "config" :
+        deviceMap = generateDeviceMap()
+
+        for key in pluginDefs[sensorType]:
+            print('{} {}'.format(key, pluginDefs[sensorType][key]))
+
+        for device in deviceMap:
+            print('{}.label {}'.format(device['id'], device['name']))
+            
+            for graphDef in graphDefs[sensorType]:
+                print('{}.{} {}'.format(device['id'], graphDef,graphDefs[sensorType][graphDef]))
+
+        sys.exit(0)
+    elif sys.argv[1] == "suggest" :
+        for key in pluginDefs:
+            print('{}'.format(key))
+        sys.exit(0)
+    elif sys.argv[1] == "version" :
+        print(pluginVersion)
+        sys.exit(0)
+    else:
+        #Unknown argument
+        sys.exit(1)
+
+else:
+    # No argument given, retrieve and output the values
+    deviceData = retrieveData()
+
+    for key in deviceData:
+        print('{}.value {}'.format(key, deviceData[key]))
+
+    sys.exit(0)
+
+
+
+
+
+
+
+
+
+
+
+
