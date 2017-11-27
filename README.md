@@ -16,3 +16,8 @@ Access Point Statistics
 This plugin uses iw <if> station dump to generate statistics of clients connected to the wireless adapter in AP (e.g. with hostapd) mode.
 
 See the script file for more details.
+
+EDAC Memory ECC Error Reporting 
+------------------------------- 
+The `edac_` plugin uses edac-utils sysfs 
+interface to count corrected and uncorrected ECC memory errors for each CS row in the system.

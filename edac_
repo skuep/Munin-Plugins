@@ -1,0 +1,129 @@
+#!/usr/bin/env python
+# plugin for monitoring ECC memory status
+# uses edac-utils sysfs
+#
+# To use, just link to this file like this:
+# ln -s /path/to/edac_ /etc/munin/plugins/edac_ce
+# ln -s /path/to/edac_ /etc/munin/plugins/edac_ue
+# for correct error count and uncorrect error count 
+# reported for all csrows mounted in the system 
+#
+# Author: Simon Kueppers <simon.kueppers@skueppers.de>
+# v1.0 27.11.2017 - First draft
+#
+# No special license on this plugin. Just pass me a beer
+# in case we meet
+
+import os
+import sys
+import fnmatch
+
+# Some global definitions
+plugin_name = list(os.path.split(sys.argv[0]))[1]
+type = plugin_name.split('_')[1]
+plugin_version = "edac v1.0"
+
+plugin_defs = {
+    'ue': {
+        'graph_title': 'Uncorrected ECC memory errors',
+        'graph_info': 'This graph shows a counter for uncorrected ECC memory errors',
+        'graph_vlabel': '',
+        'graph_category': 'edac',
+    }, 'ce': {
+        'graph_title': 'Corrected ECC memory errors',
+        'graph_info': 'This graph shows a counter for corrected ECC memory errors',
+        'graph_vlabel': '',
+        'graph_category': 'edac',
+    }
+}
+
+graph_defs = {
+    'ue': {
+        'type': 'GAUGE',
+        'warning': '0:0',
+        'critical': '0:1'
+    }, 'ce': {
+        'type': 'GAUGE',
+        'warning': '0:5',
+        'critical': '0:10'
+    },
+}
+
+def get_mc_tree():
+    edac_dir = '/sys/devices/system/edac/mc'
+    mc_tree = {}
+    # for every memory controller available
+    for mc in fnmatch.filter(os.listdir(edac_dir), 'mc*'):
+        mc_dir = os.path.join(edac_dir, mc)
+        mc_tree[mc] = {}
+
+        # for every csrow on the memory controller
+        for csrow in fnmatch.filter(os.listdir(mc_dir), 'csrow*'):
+            csrow_dir = os.path.join(mc_dir, csrow)
+            mc_tree[mc][csrow] = csrow_dir
+            
+    return mc_tree
+    
+def get_graph_data():
+    data = {'ue': {}, 'ce': {}}
+
+    for mc_name, csrows in get_mc_tree().items():
+        for csrow_label, csrow_dir in csrows.items():
+            # get counter values
+            for key in data.keys():
+                with open(os.path.join(csrow_dir, key + '_count')) as f:
+                    data[key]['{}_{}'.format(mc_name, csrow_label)] = f.readline().rstrip()
+
+    return data
+
+def get_graph_labels():
+    labels = {}
+    for mc_name, csrows in get_mc_tree().items():
+        for csrow_label, csrow_dir in csrows.items():
+            queries = {'size_mb': None, 'mem_type': None, 'edac_mode': None}
+            for key in queries.keys():
+                with open(os.path.join(csrow_dir, key)) as f:
+                    queries[key] = f.readline().rstrip()
+
+            label = '{}:{}'.format(mc_name, csrow_label)
+            descr = '{size_mb} MB {mem_type} ({edac_mode})'.format(**queries)
+            labels['{}_{}'.format(mc_name, csrow_label)] = '{} {}'.format(label, descr)
+    return labels
+
+# The real business happens here
+# Check what munin wants from us and answer accordingly
+if len(sys.argv) > 1:
+    if sys.argv[1] == "autoconf" :
+        print('yes')
+        sys.exit(0)
+    elif sys.argv[1] == "config" :
+        for key in plugin_defs[type]:
+            print('{} {}'.format(key, plugin_defs[type][key]))
+
+        for graph_key, graph_value in sorted(get_graph_labels().items()):
+            print('{}.label {}'.format(graph_key, graph_value))
+            for def_key, def_value in graph_defs[type].items():
+                print('{}.{} {}'.format(graph_key, def_key, def_value))
+
+        sys.exit(0)
+    elif sys.argv[1] == "suggest" :
+        for key in plugin_defs:
+            print('{}'.format(key))
+        sys.exit(0)
+    elif sys.argv[1] == "version" :
+        print(plugin_version)
+        sys.exit(0)
+    else:
+        #Unknown argument
+        sys.exit(1)
+
+else:
+    # No argument given, retrieve and output the values
+    graph_data = get_graph_data()
+    
+    for key, value in sorted(graph_data[type].items()):
+        print('{}.value {}'.format(key, value))
+
+    sys.exit(0)
+
+
