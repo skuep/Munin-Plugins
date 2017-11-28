@@ -82,7 +82,7 @@ graph_defs = {
 }
 
 def getStationData():
-    data = subprocess.check_output("iw dev {} station dump".format(interface), shell=True)
+    data = subprocess.check_output(["iw", "dev", interface, "station", "dump"], shell=False)
     
 
     stationRegExp = "Station "
